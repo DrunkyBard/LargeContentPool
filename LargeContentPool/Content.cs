@@ -2,7 +2,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.CompilerServices;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace LargeContentPool
 {
@@ -11,6 +13,8 @@ namespace LargeContentPool
 		private readonly LargeContentPool _pool;
 		private readonly LinkedList<ByteArraySegment> _chunks;
 		private bool _disposed;
+
+		public long Size => _chunks.Aggregate(0L, (s, chunk) => s + chunk.Filled); //TODO: Memoize result
 
 		internal Content(LargeContentPool pool)
 		{
@@ -25,7 +29,7 @@ namespace LargeContentPool
 			_chunks.AddLast(initialSegment);
 		}
 
-		public Content Write(byte data)
+		public Content ReadFrom(byte data)
 		{
 			CheckIfCanPerformOperation();
 
@@ -45,7 +49,7 @@ namespace LargeContentPool
 			return this;
 		}
 
-		public Content Write(byte[] data, int offset, int count)
+		public Content ReadFrom(byte[] data, int offset, int count)
 		{
 			CheckIfCanPerformOperation();
 
@@ -71,23 +75,18 @@ namespace LargeContentPool
 			return this;
 		}
 
-		public Content Write(Stream stream)
+		public Content ReadFrom(Stream stream)
 		{
+			CheckIfCanPerformOperation();
+
 			if (!stream.CanRead)
 			{
 				throw new ArgumentException("Stream should be readable");
 			}
 
 			var lastSegment = FetchLastSegment();
-
-			if (lastSegment.Free == 0)
-			{
-				lastSegment = _pool.NextSegment();
-				_chunks.AddLast(lastSegment);
-			}
-
 			int readed;
-
+			
 			while ((readed = stream.Read(lastSegment.Array, lastSegment.Offset, lastSegment.Free)) > 0)
 			{
 				lastSegment.SetFilled(readed);
@@ -102,8 +101,55 @@ namespace LargeContentPool
 			return this;
 		}
 
-		public Content Read(Stream stream)
+		public async Task ReadFromAsync(Stream stream, CancellationToken token)
 		{
+			CheckIfCanPerformOperation();
+
+			if (!stream.CanRead)
+			{
+				throw new ArgumentException("Stream should be readable");
+			}
+
+			token.ThrowIfCancellationRequested();
+			var lastSegment = FetchLastSegment();
+			int readed;
+
+			while ((readed = await stream.ReadAsync(lastSegment.Array, lastSegment.Offset, lastSegment.Free, token)) > 0)
+			{
+				lastSegment.SetFilled(readed);
+
+				if (lastSegment.Free == 0)
+				{
+					lastSegment = _pool.NextSegment();
+					_chunks.AddLast(lastSegment);
+				}
+			}
+		}
+
+		private ByteArraySegment FetchLastSegment()
+		{
+			if (_chunks.Count == 0)
+			{
+				_chunks.AddLast(_pool.NextSegment());
+
+				return _chunks.Last.Value;
+			}
+
+			var lastSegment = _chunks.Last.Value;
+
+			if (lastSegment.Free == 0)
+			{
+				lastSegment = _pool.NextSegment();
+				_chunks.AddLast(lastSegment);
+			}
+
+			return lastSegment;
+		}
+
+		public void WriteTo(Stream stream)
+		{
+			CheckIfCanPerformOperation();
+
 			if (!stream.CanWrite)
 			{
 				throw new ArgumentException("Stream should be writeable");
@@ -113,21 +159,23 @@ namespace LargeContentPool
 			{
 				stream.Write(chunk.Array, chunk.Offset, chunk.AvailableCount);
 			}
-
-			return this;
 		}
 
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private ByteArraySegment FetchLastSegment()
+		public async Task WriteToAsync(Stream stream, CancellationToken token)
 		{
-			if (_chunks.Count == 0)
+			CheckIfCanPerformOperation();
+
+			if (!stream.CanWrite)
 			{
-				_chunks.AddLast(_pool.NextSegment());
+				throw new ArgumentException("Stream should be writeable");
 			}
 
-			return _chunks.Last.Value;
+			foreach (var chunk in _chunks)
+			{
+				await stream.WriteAsync(chunk.Array, chunk.Offset, chunk.AvailableCount, token);
+			}
 		}
-
+	
 		private IEnumerable<ValueTuple<ByteArraySegment, int>> Segments(int count)
 		{
 			do
@@ -138,6 +186,19 @@ namespace LargeContentPool
 
 				yield return (newSegment, filled);
 			} while (count != 0);
+		}
+
+		public void Clear()
+		{
+			foreach (var chunk in _chunks)
+			{
+				Array.Clear(chunk.Array, chunk.Offset, chunk.Filled);
+			}
+		}
+
+		public void Resize(int newSize)
+		{
+
 		}
 
 		public void Dispose()
@@ -157,7 +218,6 @@ namespace LargeContentPool
 			_disposed = true;
 		}
 
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private void CheckIfCanPerformOperation()
 		{
 			if (_disposed)

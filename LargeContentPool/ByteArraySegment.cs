@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace LargeContentPool
 {
-	internal class ByteArraySegment : IEnumerable<byte>
+	internal struct ByteArraySegment : IEnumerable<byte>
 	{
 		public readonly int AvailableCount;
 		public readonly byte[] Array;
@@ -58,7 +58,7 @@ namespace LargeContentPool
 
 		IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-		internal sealed class SegmentEnumerator : IEnumerator<byte>
+		private sealed class SegmentEnumerator : IEnumerator<byte>
 		{
 			private readonly ByteArraySegment _segment;
 			private long _currentIdx;
