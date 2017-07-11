@@ -13,8 +13,23 @@ namespace LargeContentPool
 		private readonly LargeContentPool _pool;
 		private readonly LinkedList<ByteArraySegment> _chunks;
 		private bool _disposed;
+		private bool _recalculateSize;
+		private int _size;
 
-		public long Size => _chunks.Aggregate(0L, (s, chunk) => s + chunk.Filled); //TODO: Memoize result
+		public long Size {
+			get
+			{
+				if (!_recalculateSize)
+				{
+					return _size;
+				}
+
+				_size = _chunks.Aggregate(0, (size, chunk) => size + chunk.Filled);
+				_recalculateSize = false;
+
+				return _size;
+			}
+		}
 
 		internal Content(LargeContentPool pool)
 		{
@@ -27,9 +42,10 @@ namespace LargeContentPool
 			_pool = pool;
 			_chunks = new LinkedList<ByteArraySegment>();
 			_chunks.AddLast(initialSegment);
+			_recalculateSize = true;
 		}
 
-		public Content ReadFrom(byte data)
+		public void ReadFrom(byte data)
 		{
 			CheckIfCanPerformOperation();
 
@@ -46,10 +62,10 @@ namespace LargeContentPool
 				_chunks.AddLast(newSegment);
 			}
 
-			return this;
+			_recalculateSize = true;
 		}
 
-		public Content ReadFrom(byte[] data, int offset, int count)
+		public void ReadFrom(byte[] data, int offset, int count)
 		{
 			CheckIfCanPerformOperation();
 
@@ -72,10 +88,10 @@ namespace LargeContentPool
 				}
 			}
 
-			return this;
+			_recalculateSize = true;
 		}
 
-		public Content ReadFrom(Stream stream)
+		public void ReadFrom(Stream stream)
 		{
 			CheckIfCanPerformOperation();
 
@@ -98,7 +114,7 @@ namespace LargeContentPool
 				}
 			}
 
-			return this;
+			_recalculateSize = true;
 		}
 
 		public async Task ReadFromAsync(Stream stream, CancellationToken token)
@@ -124,6 +140,8 @@ namespace LargeContentPool
 					_chunks.AddLast(lastSegment);
 				}
 			}
+
+			_recalculateSize = true;
 		}
 
 		private ByteArraySegment FetchLastSegment()
@@ -198,7 +216,59 @@ namespace LargeContentPool
 
 		public void Resize(int newSize)
 		{
+			if (Size == newSize)
+			{
+				return;
+			}
 
+			if (Size > newSize)
+			{
+				Shrink(newSize);
+			}
+			else
+			{
+				Increase(newSize);
+			}
+
+			_recalculateSize = true;
+		}
+
+		private void Increase(int size)
+		{
+			var delta = size - Size;
+
+			do
+			{
+				var newSegment = _pool.NextSegment();
+				_chunks.AddLast(newSegment);
+				delta -= newSegment.AvailableCount;
+			} while (delta > 0);
+		}
+
+		private void Shrink(int size)
+		{
+			var chunk = _chunks.First;
+
+			do
+			{
+				if (chunk == null)
+				{
+					return;
+				}
+
+				size -= chunk.Value.AvailableCount;
+				chunk = chunk.Next;
+			} while (size > 0);
+
+			if (chunk != null)
+			{
+				while (chunk != null)
+				{
+					_chunks.Remove(chunk);
+					_pool.Release(chunk.Value);
+					chunk = chunk.Next;
+				}
+			}
 		}
 
 		public void Dispose()
