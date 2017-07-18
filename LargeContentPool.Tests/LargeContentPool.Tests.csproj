@@ -60,9 +60,6 @@
     <PackageReference Include="BenchmarkDotNet">
       <Version>0.10.8</Version>
     </PackageReference>
-    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream">
-      <Version>1.2.2</Version>
-    </PackageReference>
     <PackageReference Include="System.ValueTuple">
       <Version>4.3.1</Version>
     </PackageReference>

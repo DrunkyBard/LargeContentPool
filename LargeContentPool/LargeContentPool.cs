@@ -12,10 +12,28 @@ namespace LargeContentPool
 		private readonly int _chunkSize;
 		private readonly LinkedList<ByteArraySegment> _free;
 		private readonly long _initialSize;
+		private readonly Lock _lock;
 
-		public long Total => _memory.Aggregate(0L, (size, bytes) => size + bytes.LongLength);
+		public long Total {
+			get
+			{
+				using (_lock.Enter())
+				{
+					return _memory.Aggregate(0L, (size, bytes) => size + bytes.LongLength);
+				}
+			}
+		}
 
-		public long Free => _free.Aggregate(0L, (size, bytes) => size + bytes.AvailableCount);
+		public long Free
+		{
+			get
+			{
+				using (_lock.Enter())
+				{
+					return _free.Aggregate(0L, (size, bytes) => size + bytes.AvailableCount);
+				}
+			}
+		}
 
 		public LargeContentPool(int initialSize, bool bounded) : this(initialSize, DefaultChunkSize, bounded)
 		{ }
@@ -26,7 +44,8 @@ namespace LargeContentPool
 			{
 				throw new ArgumentOutOfRangeException(nameof(initialSize), "Initial size should be greater than zero");
 			}
-
+			
+			_lock = Lock.Create();
 			_memory = new LinkedList<byte[]>();
 			_memory.AddLast(new byte[initialSize]);
 			_initialSize = initialSize;
@@ -52,7 +71,11 @@ namespace LargeContentPool
 		internal void Release(ByteArraySegment releasedSegment)
 		{
 			Array.Clear(releasedSegment.Array, releasedSegment.Offset, releasedSegment.Filled);
-			_free.AddFirst(releasedSegment);
+
+			using (_lock.Enter())
+			{
+				_free.AddFirst(releasedSegment);
+			}
 		}
 
 		public void ForceIncrease()
@@ -64,15 +87,20 @@ namespace LargeContentPool
 
 		internal ByteArraySegment NextSegment() //TODO: handle bounded flag
 		{
-			if (_free.Count == 0)
+			ByteArraySegment nextSegment;
+			
+			using (_lock.Enter())
 			{
-				ForceIncrease();
+				if (_free.Count == 0)
+				{
+					ForceIncrease();
+				}
+
+				nextSegment = _free.First.Value;
+				_free.RemoveFirst();
 			}
 
-			var next = _free.First.Value;
-			_free.RemoveFirst();
-
-			return next;
+			return nextSegment;
 		}
 	}
 }
