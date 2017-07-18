@@ -2,7 +2,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,23 +12,8 @@ namespace LargeContentPool
 		private readonly LargeContentPool _pool;
 		private readonly LinkedList<ByteArraySegment> _chunks;
 		private bool _disposed;
-		private bool _recalculateSize;
-		private int _size;
 
-		public long Size {
-			get
-			{
-				if (!_recalculateSize)
-				{
-					return _size;
-				}
-
-				_size = _chunks.Aggregate(0, (size, chunk) => size + chunk.Filled);
-				_recalculateSize = false;
-
-				return _size;
-			}
-		}
+		public long Size { get; private set; }
 
 		internal Content(LargeContentPool pool)
 		{
@@ -42,7 +26,6 @@ namespace LargeContentPool
 			_pool = pool;
 			_chunks = new LinkedList<ByteArraySegment>();
 			_chunks.AddLast(initialSegment);
-			_recalculateSize = true;
 		}
 
 		public void ReadFrom(byte data)
@@ -62,7 +45,7 @@ namespace LargeContentPool
 				_chunks.AddLast(newSegment);
 			}
 
-			_recalculateSize = true;
+			Size += 1;
 		}
 
 		public void ReadFrom(byte[] data, int offset, int count)
@@ -88,7 +71,7 @@ namespace LargeContentPool
 				}
 			}
 
-			_recalculateSize = true;
+			Size += count;
 		}
 
 		public void ReadFrom(Stream stream)
@@ -106,6 +89,7 @@ namespace LargeContentPool
 			while ((readed = stream.Read(lastSegment.Array, lastSegment.Offset, lastSegment.Free)) > 0)
 			{
 				lastSegment.SetFilled(readed);
+				Size += readed;
 
 				if (lastSegment.Free == 0)
 				{
@@ -113,8 +97,6 @@ namespace LargeContentPool
 					_chunks.AddLast(lastSegment);
 				}
 			}
-
-			_recalculateSize = true;
 		}
 
 		public async Task ReadFromAsync(Stream stream, CancellationToken token)
@@ -133,6 +115,7 @@ namespace LargeContentPool
 			while ((readed = await stream.ReadAsync(lastSegment.Array, lastSegment.Offset, lastSegment.Free, token)) > 0)
 			{
 				lastSegment.SetFilled(readed);
+				Size += readed;
 
 				if (lastSegment.Free == 0)
 				{
@@ -140,8 +123,6 @@ namespace LargeContentPool
 					_chunks.AddLast(lastSegment);
 				}
 			}
-
-			_recalculateSize = true;
 		}
 
 		private ByteArraySegment FetchLastSegment()
@@ -230,7 +211,7 @@ namespace LargeContentPool
 				Increase(newSize);
 			}
 
-			_recalculateSize = true;
+			Size = newSize;
 		}
 
 		private void Increase(int size)

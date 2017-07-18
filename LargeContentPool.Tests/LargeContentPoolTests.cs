@@ -21,6 +21,7 @@ namespace LargeContentPool.Tests
 			}
 
 			Assert.Equal(bytes, buffer);
+			Assert.Equal(bytes.LongLength, buffer.Size);
 		}
 
 		[Theory]
@@ -33,6 +34,7 @@ namespace LargeContentPool.Tests
 			buffer.ReadFrom(bytes, 0, bytes.Length);
 
 			Assert.Equal(bytes, buffer);
+			Assert.Equal(bytes.LongLength, buffer.Size);
 		}
 
 		[Theory]
@@ -59,7 +61,9 @@ namespace LargeContentPool.Tests
 			}
 
 			Assert.Equal(bytes, syncBuffer);
+			Assert.Equal(bytes.LongLength, syncBuffer.Size);
 			Assert.Equal(bytes, asyncBuffer);
+			Assert.Equal(bytes.LongLength, asyncBuffer.Size);
 		}
     }
 }

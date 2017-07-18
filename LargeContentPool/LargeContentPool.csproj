@@ -59,6 +59,7 @@
     <Compile Include="ByteArraySegment.cs" />
     <Compile Include="Content.cs" />
     <Compile Include="LargeContentPool.cs" />
+    <Compile Include="InternalLinkedList.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
