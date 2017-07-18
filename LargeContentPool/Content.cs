@@ -50,6 +50,21 @@ namespace LargeContentPool
 
 		public void ReadFrom(byte[] data, int offset, int count)
 		{
+			if (data == null)
+			{
+				throw new ArgumentNullException(nameof(data));
+			}
+
+			if (offset < 0 || offset >= data.Length)
+			{
+				throw new ArgumentOutOfRangeException(nameof(offset), "Offset should be non negative and less than source array length");
+			}
+
+			if (data.Length - offset < count)
+			{
+				throw new ArgumentOutOfRangeException(nameof(count), "Offset + count is greater than source array length");
+			}
+
 			CheckIfCanPerformOperation();
 
 			var lastSegment = FetchLastSegment();
@@ -76,6 +91,11 @@ namespace LargeContentPool
 
 		public void ReadFrom(Stream stream)
 		{
+			if (stream == null)
+			{
+				throw new ArgumentNullException(nameof(stream));
+			}
+
 			CheckIfCanPerformOperation();
 
 			if (!stream.CanRead)
@@ -101,6 +121,11 @@ namespace LargeContentPool
 
 		public async Task ReadFromAsync(Stream stream, CancellationToken token)
 		{
+			if (stream == null)
+			{
+				throw new ArgumentNullException(nameof(stream));
+			}
+
 			CheckIfCanPerformOperation();
 
 			if (!stream.CanRead)
@@ -147,6 +172,11 @@ namespace LargeContentPool
 
 		public void WriteTo(Stream stream)
 		{
+			if (stream == null)
+			{
+				throw new ArgumentNullException(nameof(stream));
+			}
+
 			CheckIfCanPerformOperation();
 
 			if (!stream.CanWrite)
@@ -162,6 +192,11 @@ namespace LargeContentPool
 
 		public async Task WriteToAsync(Stream stream, CancellationToken token)
 		{
+			if (stream == null)
+			{
+				throw new ArgumentNullException(nameof(stream));
+			}
+
 			CheckIfCanPerformOperation();
 
 			if (!stream.CanWrite)
@@ -197,6 +232,11 @@ namespace LargeContentPool
 
 		public void Resize(int newSize)
 		{
+			if (newSize < 0)
+			{
+				throw new ArgumentOutOfRangeException(nameof(newSize), "New size should be greater than zero");
+			}
+
 			if (Size == newSize)
 			{
 				return;

@@ -13,7 +13,9 @@ namespace LargeContentPool
 		private readonly LinkedList<ByteArraySegment> _free;
 		private readonly long _initialSize;
 
-		public long Size => _memory.Aggregate(0L, (size, bytes) => size + bytes.LongLength);
+		public long Total => _memory.Aggregate(0L, (size, bytes) => size + bytes.LongLength);
+
+		public long Free => _free.Aggregate(0L, (size, bytes) => size + bytes.AvailableCount);
 
 		public LargeContentPool(int initialSize, bool bounded) : this(initialSize, DefaultChunkSize, bounded)
 		{ }
