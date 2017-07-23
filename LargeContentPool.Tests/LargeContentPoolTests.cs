@@ -99,18 +99,6 @@ namespace LargeContentPool.Tests
 		}
 
 		[Fact]
-		public void WhenPerformInducedForcedIncrease_ThenPoolSizeShouldBeIncreasedOnInitialSize()
-		{
-			var r = new Random();
-			var initialSize = r.Next(1000, 2000);
-			var pool = new LargeContentPool(initialSize, 10, false);
-
-			pool.ForceIncrease();
-
-			Assert.Equal(initialSize * 2, pool.Total);
-		}
-
-		[Fact]
 		public void WhenReleaseBuffer_ThenAllMemoryShouldBeReturnedToPool()
 		{
 			var r = new Random();
@@ -146,9 +134,9 @@ namespace LargeContentPool.Tests
 			var initialSize = r.Next(1000, 2000);
 			var chunkSize = initialSize / 10;
 			var pool = new LargeContentPool(initialSize, chunkSize, false);
-			var content = pool.Acquire();
 			var bytes = Enumerable.Range(0, chunkSize).Select(i => (byte)i).ToArray();
 			var zeroBytes = Enumerable.Range(0, chunkSize).Select(_ => (byte)0).ToArray();
+			var content = pool.Acquire();
 			content.ReadFrom(bytes, 0, bytes.Length);
 
 			content.Clear();

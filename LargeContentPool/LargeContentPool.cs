@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace LargeContentPool
 {
@@ -13,27 +14,11 @@ namespace LargeContentPool
 		private readonly LinkedList<ByteArraySegment> _free;
 		private readonly long _initialSize;
 		private readonly Lock _lock;
+		private long _totalMemory;
+		private long _freeMemory;
 
-		public long Total {
-			get
-			{
-				using (_lock.Enter())
-				{
-					return _memory.Aggregate(0L, (size, bytes) => size + bytes.LongLength);
-				}
-			}
-		}
-
-		public long Free
-		{
-			get
-			{
-				using (_lock.Enter())
-				{
-					return _free.Aggregate(0L, (size, bytes) => size + bytes.AvailableCount);
-				}
-			}
-		}
+		public long Total => Volatile.Read(ref _totalMemory);
+		public long Free => Volatile.Read(ref _freeMemory);
 
 		public LargeContentPool(int initialSize, bool bounded) : this(initialSize, DefaultChunkSize, bounded)
 		{ }
@@ -44,7 +29,8 @@ namespace LargeContentPool
 			{
 				throw new ArgumentOutOfRangeException(nameof(initialSize), "Initial size should be greater than zero");
 			}
-			
+
+			_totalMemory = initialSize;
 			_lock = Lock.Create();
 			_memory = new LinkedList<byte[]>();
 			_memory.AddLast(new byte[initialSize]);
@@ -63,6 +49,7 @@ namespace LargeContentPool
 			{
 				var segment = new ByteArraySegment(lastSegment, i, Math.Min(_chunkSize, lastSegment.Length - i));
 				_free.AddLast(segment);
+				Interlocked.Add(ref _freeMemory, segment.AvailableCount);
 			}
 		}
 
@@ -75,13 +62,15 @@ namespace LargeContentPool
 			using (_lock.Enter())
 			{
 				_free.AddFirst(releasedSegment);
+				Interlocked.Add(ref _freeMemory, releasedSegment.AvailableCount);
 			}
 		}
 
-		public void ForceIncrease()
+		private void ForceIncrease()
 		{
 			var newMemory = new byte[_initialSize];
 			_memory.AddLast(newMemory);
+			Interlocked.Add(ref _totalMemory, _initialSize);
 			InitializeFreeSegments();
 		}
 
@@ -98,6 +87,7 @@ namespace LargeContentPool
 
 				nextSegment = _free.First.Value;
 				_free.RemoveFirst();
+				Interlocked.Add(ref _freeMemory, -nextSegment.AvailableCount);
 			}
 
 			return nextSegment;
